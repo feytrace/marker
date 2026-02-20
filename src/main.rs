@@ -1,122 +1,139 @@
-use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
 #[derive(Parser, Debug)]
-#[command(version, about = "Persistent directory markers CLI")]
+#[command(
+    name = "marker_cli",
+    version,
+    about = "Persistent directory markers CLI"
+)]
 struct Args {
-    #[arg(short, long, value_enum)]
-    mode: Option<Mode>,
-
-    #[arg(required = false)]
-    flag: Option<String>,
-
-    #[arg(required = false)]
-    directory: Option<String>,
-
-    #[arg(short, long, action(ArgAction::SetTrue))]
-    list: bool,
-
-    #[arg(short, long)]
-    verbose: bool,
+    #[command(subcommand)]
+    command: Command,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
-enum Mode {
-    Set,
-    Delete,
-    Retrieve,
+#[derive(Subcommand, Debug)]
+enum Command {
+    Set {
+        #[arg(short, long)]
+        flag: String,
+        #[arg(short, long)]
+        directory: PathBuf,
+    },
+    Delete {
+        #[arg(short, long)]
+        flag: Option<String>,
+
+        #[arg(short)]
+        recursive: bool,
+    },
+    Retrieve {
+        #[arg(short, long)]
+        flag: String,
+    },
+    List,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Markers {
-    map: HashMap<String, String>,
+    map: HashMap<String, PathBuf>,
 }
 
 impl Markers {
-    fn load(path: &PathBuf) -> Self {
+    fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         if path.exists() {
-            let content = fs::read_to_string(path).expect("Failed to read markers file");
-            serde_json::from_str(&content).unwrap_or(Self { map: HashMap::new() })
+            let content = fs::read_to_string(path)?;
+            Ok(serde_json::from_str(&content)?)
         } else {
-            Self { map: HashMap::new() }
+            Ok(Self {
+                map: HashMap::new(),
+            })
         }
     }
 
-    fn save(&self, path: &PathBuf) {
-        let content = serde_json::to_string_pretty(&self).expect("Failed to serialize markers");
-        fs::write(path, content).expect("Failed to write markers file");
+    fn save(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        let content = serde_json::to_string_pretty(&self)?;
+        fs::write(&path, content)?;
+        Ok(())
     }
 }
 
 fn get_config_path() -> PathBuf {
     if let Some(proj_dirs) = ProjectDirs::from("com", "example", "marker_cli") {
         let config_dir = proj_dirs.config_dir();
-        fs::create_dir_all(config_dir).expect("Failed to create config directory");
+        fs::create_dir_all(config_dir).expect("Unable to create Makrer directory");
         config_dir.join("markers.json")
     } else {
         panic!("Could not determine config directory");
     }
 }
 
-fn main() {
+fn handle_set(
+    config_path: &Path,
+    flag: String,
+    dir: PathBuf,
+    markers: &mut Markers,
+) -> Result<(), Box<dyn std::error::Error>> {
+    markers.map.insert(flag, dir);
+    markers.save(config_path)?;
+    Ok(())
+}
+
+fn handle_delete(
+    config_path: &Path,
+    flag: Option<String>,
+    recursive: bool,
+    markers: &mut Markers,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if recursive {
+        markers.map.clear();
+    } else if let Some(f) = flag {
+        markers.map.remove(&f);
+    } else {
+        return Err("Either a flag or recursive must be specified".into());
+    }
+    markers.save(config_path)?;
+    Ok(())
+}
+
+fn handle_retrieve(flag: String, markers: &Markers) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(dir) = markers.map.get(&flag) {
+        println!("{}", dir.display());
+        Ok(())
+    } else {
+        Err(format!("Marker '{}' does not exist", flag).into())
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let config_path = get_config_path();
-    
-    if args.verbose {
-        println!("Using markers file: {}", config_path.display());
-    }
+    let mut markers = Markers::load(&config_path)?;
 
-    let mut markers = Markers::load(&config_path);
-
-    if let Some(mode) = args.mode {
-        match mode {
-            Mode::Set => {
-                if let Some(dir) = args.directory {
-                    markers.map.insert(args.flag.clone().unwrap_or_default(), dir.clone());
-                    println!("Set marker '{:?}' -> '{}'", args.flag, dir);
-                } else {
-                    eprintln!("Error: Directory is required when using set mode");
-                    return;
-                }
-            }
-            Mode::Delete => {
-                if let Some(flag) = &args.flag {
-                    if markers.map.remove(flag).is_some() {
-                        println!("Deleted marker '{}'", flag);
-                    } else {
-                        println!("Marker '{}' does not exist", flag);
-                    }
-                } else {
-                    eprintln!("Error: Flag is required to delete a marker");
-                }
-            }
-            Mode::Retrieve => {
-                if let Some(flag) = &args.flag {
-                    if let Some(dir) = markers.map.get(flag) {
-                        println!("{}", dir);
-                    } else {
-                        println!("Marker '{}' does not exist", flag);
-                    }
-                } else {
-                    eprintln!("Error: Flag is required to retrieve a marker");
-                }
+    match args.command {
+        Command::Set { flag, directory } => {
+            handle_set(&config_path, flag, directory, &mut markers)?
+        }
+        Command::Delete { flag, recursive } => {
+            handle_delete(&config_path, flag, recursive, &mut markers)?
+        }
+        Command::Retrieve { flag } => handle_retrieve(flag, &markers)?,
+        Command::List => {
+            if markers.map.is_empty() {
+                println!("No markers set.");
+            } else {
+                println!("All markers: {:#?}", markers.map);
             }
         }
     }
 
-    if args.list {
-        if markers.map.is_empty() {
-            println!("No markers set.");
-        } else {
-            println!("All markers: {:#?}", markers.map);
-        }
-    }
-
-    markers.save(&config_path);
+    Ok(())
 }
