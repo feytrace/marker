@@ -1,51 +1,65 @@
-name: Build Marker
+name: Build and Release Rust App
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - main
   pull_request:
-    branches: [ master ]
+    branches:
+      - main
   release:
-    types: [ published ]
+    types: [published]  # Run when a release is published
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
-        platform: [ubuntu-latest, windows-latest]
-      steps:
-          - name: Checkout code
-            uses: actions/checkout@v3
+        platform: [ubuntu-latest, macos-latest, windows-latest]
 
-          - name: Set up Rust
-            uses: actions-rs/toolchain@v1
-            with:
-              toolchain: stable
-              override: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-          - name: Build
-            run: |
-              cargo build --release
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-          - name: Package artifacts
-            run: |
-              mkdir -p artifacts
-              if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-                cp target/release/*.exe artifacts/
-              else
-                tar -czf artifacts/marker.tar.gz -C target/release marker
-              fi
+      - name: Build
+        run: cargo build --release
 
-          - name: Upload artifacts
-            uses: actions/upload-artifact@v3
-            with:
-              name: marker-${{ matrix.platform }}
-              path: artifacts/
+      - name: Package artifact
+        run: |
+          mkdir -p artifacts
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            cp target/release/*.exe artifacts/
+          else
+            tar -czf artifacts/marker.tar.gz -C target/release marker
+          fi
 
-          - name: Create release
-            uses: softprops/action-gh-release@v1
-            with:
-              files: artifacts/*
-            env:
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: marker-${{ matrix.platform }}
+          path: artifacts/
+
+  release:
+    name: Release artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: marker-ubuntu-latest
+          path: artifacts
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*   # Include all built files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
