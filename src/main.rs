@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use clap::{builder::ArgPredicate, Parser, ValueEnum};
+use clap::{Parser, ValueEnum};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -10,16 +10,11 @@ use serde_json;
 #[derive(Parser, Debug)]
 #[command(version, about = "Persistent directory markers CLI")]
 struct Args {
-    #[arg(short, long, value_enum, 
-        default_value_ifs = ["list", ArgPredicate::IsPresent, Mode::Retrieve])
-
-    ]
+    #[arg(short, long, value_enum, default_value_t = Mode::Retrieve)]
     mode: Mode,
 
-    #[arg(required = false)]
     flag: String,
 
-    #[arg(required = false)]
     directory: Option<String>,
 
     #[arg(short, long)]
