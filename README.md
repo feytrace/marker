@@ -1,3 +1,3 @@
--l
-
-otherwise good
+now delete
+fuzzy search
+better error cases, check for failures across
