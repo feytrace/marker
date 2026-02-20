@@ -8,7 +8,7 @@ on:
     branches:
       - main
   release:
-    types: [published]  # Run when a release is published
+    types: [published]
 
 jobs:
   build:
@@ -51,15 +51,27 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifacts
+      - name: Download Ubuntu artifact
         uses: actions/download-artifact@v3
         with:
           name: marker-ubuntu-latest
           path: artifacts
 
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: marker-macos-latest
+          path: artifacts
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: marker-windows-latest
+          path: artifacts
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
-          files: artifacts/*   # Include all built files
+          files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
