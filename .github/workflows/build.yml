@@ -1,0 +1,51 @@
+name: Build Marker
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+      steps:
+          - name: Checkout code
+            uses: actions/checkout@v3
+
+          - name: Set up Rust
+            uses: actions-rs/toolchain@v1
+            with:
+              toolchain: stable
+              override: true
+
+          - name: Build
+            run: |
+              cargo build --release
+
+          - name: Package artifacts
+            run: |
+              mkdir -p artifacts
+              if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+                cp target/release/*.exe artifacts/
+              else
+                tar -czf artifacts/marker.tar.gz -C target/release marker
+              fi
+
+          - name: Upload artifacts
+            uses: actions/upload-artifact@v3
+            with:
+              name: marker-${{ matrix.platform }}
+              path: artifacts/
+
+          - name: Create release
+            uses: softprops/action-gh-release@v1
+            with:
+              files: artifacts/*
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
