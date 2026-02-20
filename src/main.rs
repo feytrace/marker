@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    fs,
-    path::PathBuf,
-};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
 use clap::{ArgAction, Parser, ValueEnum};
 use directories::ProjectDirs;
@@ -26,9 +24,6 @@ struct Args {
 
     #[arg(short, long)]
     verbose: bool,
-
-    #[arg(short = 'r', action(ArgAction::SetTrue))]
-    recursive: bool,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -89,7 +84,6 @@ fn main() {
                     eprintln!("Error: Directory is required when using set mode");
                     return;
                 }
-
             }
             Mode::Delete => {
                 if let Some(flag) = &args.flag {
@@ -98,19 +92,8 @@ fn main() {
                     } else {
                         println!("Marker '{}' does not exist", flag);
                     }
-                } else if args.recursive {
-                    let keys: Vec<String> = markers.map.keys().cloned().collect();
-                    
-                    if !keys.is_empty() {
-                        for key in keys {
-                            markers.map.remove(&key);
-                            println!("Deleted marker '{}'", key);
-                        }
-                    } else {
-                        println!("No markers to delete.");
-                    }
                 } else {
-                    println!("Either state a flag or enable recursive deletion using the -r tag")
+                    eprintln!("Error: Flag is required to delete a marker");
                 }
             }
             Mode::Retrieve => {
