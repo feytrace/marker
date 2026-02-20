@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use clap::{builder::ArgPredicate, Parser, ValueEnum};
+use clap::{ArgAction, Parser, ValueEnum};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -10,19 +10,16 @@ use serde_json;
 #[derive(Parser, Debug)]
 #[command(version, about = "Persistent directory markers CLI")]
 struct Args {
-    #[arg(short, long, value_enum, 
-        default_value_ifs = ["list", ArgPredicate::IsPresent, Mode::Retrieve])
-
-    ]
-    mode: Mode,
+    #[arg(short, long, value_enum)]
+    mode: Option<Mode>,
 
     #[arg(required = false)]
-    flag: String,
+    flag: Option<String>,
 
     #[arg(required = false)]
     directory: Option<String>,
 
-    #[arg(short, long)]
+    #[arg(short, long, action(ArgAction::SetTrue))]
     list: bool,
 
     #[arg(short, long)]
@@ -77,30 +74,48 @@ fn main() {
 
     let mut markers = Markers::load(&config_path);
 
-    match args.mode {
-        Mode::Set => {
-            let dir = args.directory.expect("Directory is required when using set mode");
-            markers.map.insert(args.flag.clone(), dir.clone());
-            println!("Set marker '{}' -> '{}'", args.flag, dir);
-        }
-        Mode::Delete => {
-            if markers.map.remove(&args.flag).is_some() {
-                println!("Deleted marker '{}'", args.flag);
-            } else {
-                println!("Marker '{}' does not exist", args.flag);
+    if let Some(mode) = args.mode {
+        match mode {
+            Mode::Set => {
+                if let Some(dir) = args.directory {
+                    markers.map.insert(args.flag.clone().unwrap_or_default(), dir.clone());
+                    println!("Set marker '{:?}' -> '{}'", args.flag, dir);
+                } else {
+                    eprintln!("Error: Directory is required when using set mode");
+                    return;
+                }
             }
-        }
-        Mode::Retrieve => {
-            if let Some(dir) = markers.map.get(&args.flag) {
-                println!("{}", dir);
-            } else {
-                println!("Marker '{}' does not exist", args.flag);
+            Mode::Delete => {
+                if let Some(flag) = &args.flag {
+                    if markers.map.remove(flag).is_some() {
+                        println!("Deleted marker '{}'", flag);
+                    } else {
+                        println!("Marker '{}' does not exist", flag);
+                    }
+                } else {
+                    eprintln!("Error: Flag is required to delete a marker");
+                }
+            }
+            Mode::Retrieve => {
+                if let Some(flag) = &args.flag {
+                    if let Some(dir) = markers.map.get(flag) {
+                        println!("{}", dir);
+                    } else {
+                        println!("Marker '{}' does not exist", flag);
+                    }
+                } else {
+                    eprintln!("Error: Flag is required to retrieve a marker");
+                }
             }
         }
     }
 
     if args.list {
-        println!("All markers: {:#?}", markers.map);
+        if markers.map.is_empty() {
+            println!("No markers set.");
+        } else {
+            println!("All markers: {:#?}", markers.map);
+        }
     }
 
     markers.save(&config_path);
